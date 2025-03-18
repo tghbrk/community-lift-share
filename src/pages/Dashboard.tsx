@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { 
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import RideCard from "@/components/RideCard";
+import { RideCard } from "@/components/RideCard";
 import {
   SidebarProvider,
   Sidebar,

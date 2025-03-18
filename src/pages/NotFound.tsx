@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Header } from "@/components/Header";
+import Header from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
 const NotFound = () => {
