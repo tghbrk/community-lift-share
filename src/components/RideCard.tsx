@@ -23,9 +23,10 @@ interface RideCardProps {
   };
   featured?: boolean;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function RideCard({ ride, featured = false, className }: RideCardProps) {
+export function RideCard({ ride, featured = false, className, style }: RideCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -36,6 +37,7 @@ export function RideCard({ ride, featured = false, className }: RideCardProps) {
         isHovered ? "shadow-elevation transform -translate-y-1" : "shadow-subtle",
         className
       )}
+      style={style}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

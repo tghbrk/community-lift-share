@@ -1,5 +1,5 @@
 
-import { MessageCircle, Calendar, Users, ChevronRight } from 'lucide-react';
+import { MessageCircle, Calendar, Users, ChevronRight, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProfileBadge } from './ProfileBadge';
 import { cn } from '@/lib/utils';
