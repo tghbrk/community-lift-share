@@ -4,10 +4,20 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Menu, X, User, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, signOut, isAuthenticated } = useAuth();
 
   // Handle scroll effect
   useEffect(() => {
@@ -22,6 +32,20 @@ export function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Extract initials from user data if available
+  const getUserInitials = () => {
+    if (!user) return 'U';
+    
+    // Try to use metadata if available
+    const metadata = user.user_metadata;
+    if (metadata && metadata.first_name && metadata.last_name) {
+      return `${metadata.first_name[0]}${metadata.last_name[0]}`;
+    }
+    
+    // Fall back to email
+    return user.email?.[0].toUpperCase() || 'U';
+  };
 
   return (
     <header className={cn(
@@ -46,17 +70,46 @@ export function Header() {
 
         {/* Action Buttons */}
         <div className="hidden md:flex items-center space-x-4">
-          <Link to="/login">
-            <Button variant="outline" size="sm" className="btn-hover">
-              Login
-            </Button>
-          </Link>
-          <Link to="/register">
-            <Button size="sm" className="btn-hover flex items-center">
-              Get Started
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-          </Link>
+          {isAuthenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={user?.user_metadata?.avatar_url} />
+                    <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">My Profile</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/my-rides">My Rides</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <button onClick={() => signOut()} className="w-full text-left">
+                    Log out
+                  </button>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <>
+              <Link to="/auth">
+                <Button variant="outline" size="sm" className="btn-hover">
+                  Login
+                </Button>
+              </Link>
+              <Link to="/auth?tab=register">
+                <Button size="sm" className="btn-hover flex items-center">
+                  Get Started
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -91,18 +144,42 @@ export function Header() {
             <svg xmlns="http://www.w3.org/2000/svg" className="mr-3 h-5 w-5 text-primary" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             About Us
           </Link>
-          <Link to="/login" className="flex items-center text-lg font-medium" onClick={() => setIsMenuOpen(false)}>
-            <User className="mr-3 h-5 w-5 text-primary" />
-            Login / Register
-          </Link>
+          
+          {isAuthenticated ? (
+            <>
+              <Link to="/profile" className="flex items-center text-lg font-medium border-b border-gray-100 pb-4" onClick={() => setIsMenuOpen(false)}>
+                <User className="mr-3 h-5 w-5 text-primary" />
+                My Profile
+              </Link>
+              <button 
+                onClick={() => {
+                  signOut();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center text-lg font-medium border-b border-gray-100 pb-4 text-red-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="mr-3 h-5 w-5 text-red-600" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Log Out
+              </button>
+            </>
+          ) : (
+            <Link to="/auth" className="flex items-center text-lg font-medium" onClick={() => setIsMenuOpen(false)}>
+              <User className="mr-3 h-5 w-5 text-primary" />
+              Login / Register
+            </Link>
+          )}
         </nav>
         
-        <div className="absolute bottom-12 left-0 right-0 px-6">
-          <Button className="w-full py-6 btn-hover flex items-center justify-center">
-            Get Started
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
-        </div>
+        {!isAuthenticated && (
+          <div className="absolute bottom-12 left-0 right-0 px-6">
+            <Link to="/auth?tab=register" onClick={() => setIsMenuOpen(false)}>
+              <Button className="w-full py-6 btn-hover flex items-center justify-center">
+                Get Started
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   );
