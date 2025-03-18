@@ -63,7 +63,7 @@ const popularRides = [
 const howItWorksSteps = [
   {
     title: 'Enter your route',
-    description: 'Tell us where you're going and when to find the perfect ride.',
+    description: "Tell us where you're going and when to find the perfect ride.",
     icon: <MapPin className="w-6 h-6" />
   },
   {
