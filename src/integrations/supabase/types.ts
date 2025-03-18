@@ -9,30 +9,128 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      bookings: {
+        Row: {
+          created_at: string
+          id: string
+          ride_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ride_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ride_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
+          bio: string | null
           created_at: string
           first_name: string | null
           id: string
+          is_driver: boolean | null
           last_name: string | null
+          license_plate: string | null
+          phone_number: string | null
+          rating: number | null
           updated_at: string
+          vehicle_color: string | null
+          vehicle_model: string | null
         }
         Insert: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           first_name?: string | null
           id: string
+          is_driver?: boolean | null
           last_name?: string | null
+          license_plate?: string | null
+          phone_number?: string | null
+          rating?: number | null
           updated_at?: string
+          vehicle_color?: string | null
+          vehicle_model?: string | null
         }
         Update: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           first_name?: string | null
           id?: string
+          is_driver?: boolean | null
           last_name?: string | null
+          license_plate?: string | null
+          phone_number?: string | null
+          rating?: number | null
           updated_at?: string
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+        }
+        Relationships: []
+      }
+      rides: {
+        Row: {
+          available_seats: number
+          created_at: string
+          departure_date: string
+          departure_time: string
+          distance: string | null
+          from_location: string
+          id: string
+          price: number
+          to_location: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_seats: number
+          created_at?: string
+          departure_date: string
+          departure_time: string
+          distance?: string | null
+          from_location: string
+          id?: string
+          price: number
+          to_location: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_seats?: number
+          created_at?: string
+          departure_date?: string
+          departure_time?: string
+          distance?: string | null
+          from_location?: string
+          id?: string
+          price?: number
+          to_location?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

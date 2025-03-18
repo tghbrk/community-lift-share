@@ -11,9 +11,18 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import OfferRide from "./pages/OfferRide";
+import EditRide from "./pages/EditRide";
+import FindRides from "./pages/FindRides";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -38,6 +47,16 @@ const App = () => (
             <Route path="/offer-ride" element={
               <ProtectedRoute>
                 <OfferRide />
+              </ProtectedRoute>
+            } />
+            <Route path="/edit-ride/:id" element={
+              <ProtectedRoute>
+                <EditRide />
+              </ProtectedRoute>
+            } />
+            <Route path="/find-rides" element={
+              <ProtectedRoute>
+                <FindRides />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

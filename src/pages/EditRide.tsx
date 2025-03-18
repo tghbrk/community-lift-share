@@ -1,6 +1,6 @@
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { 
   Card, 
   CardContent, 
@@ -24,13 +24,16 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar as CalendarIcon, Clock, MapPin, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { supabase } from "@/integrations/supabase/client";
 import { useRides } from "@/hooks/useRides";
+import { useToast } from "@/components/ui/use-toast";
+import { Ride } from "@/types/rides";
 
-const offerRideSchema = z.object({
+const editRideSchema = z.object({
   from_location: z.string().min(3, { message: "Departure location is required" }),
   to_location: z.string().min(3, { message: "Destination is required" }),
   departure_date: z.date({ required_error: "Departure date is required" }),
@@ -41,14 +44,18 @@ const offerRideSchema = z.object({
   additional_notes: z.string().optional(),
 });
 
-type OfferRideFormValues = z.infer<typeof offerRideSchema>;
+type EditRideFormValues = z.infer<typeof editRideSchema>;
 
-const OfferRide = () => {
+const EditRide = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { createRide, isLoading } = useRides();
+  const { toast } = useToast();
+  const { updateRide } = useRides();
+  const [isLoading, setIsLoading] = useState(true);
+  const [ride, setRide] = useState<Ride | null>(null);
   
-  const form = useForm<OfferRideFormValues>({
-    resolver: zodResolver(offerRideSchema),
+  const form = useForm<EditRideFormValues>({
+    resolver: zodResolver(editRideSchema),
     defaultValues: {
       from_location: "",
       to_location: "",
@@ -59,22 +66,99 @@ const OfferRide = () => {
     },
   });
   
-  const onSubmit = async (data: OfferRideFormValues) => {
+  useEffect(() => {
+    const fetchRide = async () => {
+      if (!id) return;
+      
+      try {
+        const { data: user } = await supabase.auth.getUser();
+        if (!user.user) {
+          toast({
+            title: "Unauthorized",
+            description: "You must be logged in to edit a ride",
+            variant: "destructive",
+          });
+          navigate('/auth');
+          return;
+        }
+        
+        const { data, error } = await supabase
+          .from('rides')
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (error) {
+          throw error;
+        }
+        
+        if (data.user_id !== user.user.id) {
+          toast({
+            title: "Unauthorized",
+            description: "You can only edit your own rides",
+            variant: "destructive",
+          });
+          navigate('/dashboard');
+          return;
+        }
+        
+        setRide(data);
+        
+        form.reset({
+          from_location: data.from_location,
+          to_location: data.to_location,
+          departure_date: parse(data.departure_date, 'yyyy-MM-dd', new Date()),
+          departure_time: data.departure_time,
+          available_seats: data.available_seats,
+          price: data.price,
+          distance: data.distance || "",
+          additional_notes: data.additional_notes || "",
+        });
+      } catch (error: any) {
+        console.error("Error fetching ride:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch ride details",
+          variant: "destructive",
+        });
+        navigate('/dashboard');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchRide();
+  }, [id, navigate, form, toast]);
+  
+  const onSubmit = async (data: EditRideFormValues) => {
+    if (!id || !ride) return;
+    
     try {
-      await createRide.mutateAsync(data);
-      navigate('/dashboard');
+      await updateRide.mutateAsync({
+        id,
+        ...data,
+      });
+      navigate('/dashboard?tab=my-rides');
     } catch (error) {
-      console.error("Error submitting form:", error);
+      console.error("Error updating ride:", error);
     }
   };
+  
+  if (isLoading) {
+    return (
+      <div className="container max-w-3xl py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
   
   return (
     <div className="container max-w-3xl py-10">
       <Card>
         <CardHeader>
-          <CardTitle>Offer a Ride</CardTitle>
+          <CardTitle>Edit Ride</CardTitle>
           <CardDescription>
-            Share your journey and help your community while saving on travel costs
+            Update the details of your ride
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -155,9 +239,6 @@ const OfferRide = () => {
                             mode="single"
                             selected={field.value}
                             onSelect={field.onChange}
-                            disabled={(date) =>
-                              date < new Date(new Date().setHours(0, 0, 0, 0))
-                            }
                             initialFocus
                           />
                         </PopoverContent>
@@ -263,14 +344,24 @@ const OfferRide = () => {
                 )}
               />
             </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={isLoading || createRide.isLoading}>
-                {(isLoading || createRide.isLoading) ? (
+            <CardFooter className="flex justify-between">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => navigate('/dashboard?tab=my-rides')}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={updateRide.isLoading}
+              >
+                {updateRide.isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Ride...
+                    Saving...
                   </>
-                ) : "Create Ride"}
+                ) : "Save Changes"}
               </Button>
             </CardFooter>
           </form>
@@ -280,4 +371,4 @@ const OfferRide = () => {
   );
 };
 
-export default OfferRide;
+export default EditRide;
