@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Check, Clock, Calendar, MapPin, AlertCircle, Plus, Car, Trash2, X, Loader2 } from "lucide-react";
+import { Check, Clock, Calendar, MapPin, AlertCircle, Plus, Car, Trash2, X, Loader2, User } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRides } from "@/hooks/useRides";
