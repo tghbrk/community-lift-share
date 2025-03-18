@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -78,21 +77,39 @@ export const useRides = () => {
   const createRide = useMutation({
     mutationFn: async (ride: Omit<Ride, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
       setIsLoading(true);
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('Not authenticated');
-      
-      const { data, error } = await supabase
-        .from('rides')
-        .insert({
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) throw new Error(`Authentication error: ${userError.message}`);
+        if (!userData.user) throw new Error('Not authenticated');
+        
+        // Log the data being sent to Supabase
+        console.log('Creating ride with data:', JSON.stringify(ride, null, 2));
+        
+        // Make sure numbers are properly formatted
+        const formattedRide = {
           ...ride,
-          user_id: user.user.id
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      setIsLoading(false);
-      return data;
+          available_seats: Number(ride.available_seats),
+          price: Number(ride.price),
+          user_id: userData.user.id
+        };
+        
+        const { data, error } = await supabase
+          .from('rides')
+          .insert(formattedRide)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Supabase error details:', error);
+          throw new Error(`Failed to create ride: ${error.message}`);
+        }
+        
+        setIsLoading(false);
+        return data;
+      } catch (error) {
+        setIsLoading(false);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rides'] });
@@ -102,11 +119,11 @@ export const useRides = () => {
         description: "Your ride has been created.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error creating ride:', error);
       toast({
         title: "Error",
-        description: "Failed to create ride. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to create ride. Please try again.",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -143,11 +160,11 @@ export const useRides = () => {
         description: "Your ride has been updated.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error updating ride:', error);
       toast({
         title: "Error",
-        description: "Failed to update ride. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to update ride. Please try again.",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -174,11 +191,11 @@ export const useRides = () => {
         description: "Your ride has been deleted.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error deleting ride:', error);
       toast({
         title: "Error",
-        description: "Failed to delete ride. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete ride. Please try again.",
         variant: "destructive",
       });
       setIsLoading(false);

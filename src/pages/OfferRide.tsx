@@ -1,4 +1,3 @@
-
 import { useNavigate } from "react-router-dom";
 import { 
   Card, 
@@ -60,13 +59,29 @@ const OfferRide = () => {
   
   const onSubmit = async (data: OfferRideFormValues) => {
     try {
-      await createRide.mutateAsync({
-        ...data,
-        departure_date: format(data.departure_date, 'yyyy-MM-dd')
-      });
+      // Format the data strictly according to Supabase schema requirements
+      const rideData = {
+        from_location: data.from_location.trim(),
+        to_location: data.to_location.trim(),
+        departure_date: format(data.departure_date, 'yyyy-MM-dd'),
+        departure_time: data.departure_time,
+        available_seats: Number(data.available_seats),
+        price: Number(data.price),
+        // Don't send null or undefined for distance - use empty string if not provided
+        distance: data.distance ? data.distance.trim() : ''
+      };
+      
+      console.log('Submitting ride data:', rideData);
+      
+      // Submit with detailed error tracking
+      const result = await createRide.mutateAsync(rideData);
+      console.log('Ride created successfully:', result);
+      
+      // Navigate on success
       navigate('/dashboard?tab=my-rides');
     } catch (error) {
       console.error("Error creating ride:", error);
+      // Error is handled by the mutation's onError callback
     }
   };
   
