@@ -104,6 +104,9 @@ const EditRide = () => {
         
         setRide(data);
         
+        // Check if additional_notes exists in data before trying to use it
+        const additionalNotes = data.additional_notes !== undefined ? data.additional_notes : "";
+        
         form.reset({
           from_location: data.from_location,
           to_location: data.to_location,
@@ -112,7 +115,7 @@ const EditRide = () => {
           available_seats: data.available_seats,
           price: data.price,
           distance: data.distance || "",
-          additional_notes: data.additional_notes || "",
+          additional_notes: additionalNotes,
         });
       } catch (error: any) {
         console.error("Error fetching ride:", error);
@@ -137,6 +140,7 @@ const EditRide = () => {
       await updateRide.mutateAsync({
         id,
         ...data,
+        departure_date: format(data.departure_date, 'yyyy-MM-dd'), // Convert Date to string
       });
       navigate('/dashboard?tab=my-rides');
     } catch (error) {
@@ -354,9 +358,9 @@ const EditRide = () => {
               </Button>
               <Button 
                 type="submit" 
-                disabled={updateRide.isLoading}
+                disabled={updateRide.isPending}
               >
-                {updateRide.isLoading ? (
+                {updateRide.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving...

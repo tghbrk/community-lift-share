@@ -1,751 +1,565 @@
 
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  Car, 
-  MapPin, 
-  Calendar, 
-  User, 
-  Clock, 
-  Settings, 
-  History,
-  Star,
-  Plus,
-  AlertCircle,
-  Loader2
-} from "lucide-react";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle,
-  CardFooter
-} from "@/components/ui/card";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Check, Clock, Calendar, MapPin, AlertCircle, Plus, Car, Trash2, X, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { RideCard } from "@/components/RideCard";
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
 import { useRides } from "@/hooks/useRides";
 import { useBookings } from "@/hooks/useBookings";
-import { format, parseISO } from "date-fns";
-import { Ride, RideWithDriver } from "@/types/rides";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("overview");
-  const { 
-    rides, 
-    userRides, 
-    isLoadingRides, 
-    isLoadingUserRides, 
-    deleteRide 
-  } = useRides();
-  const { 
-    userBookings, 
-    isLoadingUserBookings, 
-    cancelBooking 
-  } = useBookings();
-  const [selectedRide, setSelectedRide] = useState<RideWithDriver | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  const upcomingRides = rides?.filter(ride => 
-    new Date(`${ride.departure_date}T${ride.departure_time}`) > new Date()
-  ).slice(0, 4) || [];
-
-  const userUpcomingRides = userRides?.filter(ride => 
-    new Date(`${ride.departure_date}T${ride.departure_time}`) > new Date()
-  ) || [];
-
+  const { user } = useAuth();
+  const { userRides, isLoadingUserRides, deleteRide } = useRides();
+  const { userBookings, isLoadingUserBookings, cancelBooking } = useBookings();
+  
+  const [selectedTab, setSelectedTab] = useState<string>("overview");
+  const [confirmDeleteRide, setConfirmDeleteRide] = useState<string | null>(null);
+  const [confirmCancelBooking, setConfirmCancelBooking] = useState<{
+    bookingId: string;
+    rideId: string;
+  } | null>(null);
+  
+  useEffect(() => {
+    // Get tab from URL query parameter
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab) {
+      setSelectedTab(tab);
+    }
+  }, [location]);
+  
+  const handleTabChange = (value: string) => {
+    setSelectedTab(value);
+    navigate(`/dashboard?tab=${value}`);
+  };
+  
   const handleDeleteRide = async (id: string) => {
-    await deleteRide.mutateAsync(id);
-    setDeleteDialogOpen(false);
+    try {
+      await deleteRide.mutateAsync(id);
+      setConfirmDeleteRide(null);
+    } catch (error) {
+      console.error("Error deleting ride:", error);
+    }
   };
-
+  
   const handleCancelBooking = async (bookingId: string, rideId: string) => {
-    await cancelBooking.mutateAsync({ bookingId, rideId });
+    try {
+      await cancelBooking.mutateAsync({ bookingId, rideId });
+      setConfirmCancelBooking(null);
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+    }
   };
-
-  // Group bookings by status
-  const pendingBookings = userBookings?.filter(booking => booking.status === 'pending') || [];
-  const confirmedBookings = userBookings?.filter(booking => booking.status === 'confirmed') || [];
-  const cancelledBookings = userBookings?.filter(booking => booking.status === 'cancelled') || [];
-
-  // Calculate statistics
+  
+  // Get upcoming rides (rides in the future)
+  const upcomingRides = userRides?.filter((ride) => {
+    const rideDateTime = new Date(`${ride.departure_date}T${ride.departure_time}`);
+    return rideDateTime > new Date();
+  }) || [];
+  
+  // Get upcoming bookings (bookings with status pending or confirmed)
+  const upcomingBookings = userBookings?.filter((booking) => {
+    return booking.status !== "cancelled" && new Date(`${booking.ride.departure_date}T${booking.ride.departure_time}`) > new Date();
+  }) || [];
+  
+  // Get counts for dashboard stats
   const totalRides = userRides?.length || 0;
+  const activeRides = upcomingRides.length;
   const totalBookings = userBookings?.length || 0;
+  const activeBookings = upcomingBookings.length;
   
-  // Estimate CO2 saved (very rough calculation assuming 120g CO2 per km per passenger)
-  const totalDistance = userRides?.reduce((acc, ride) => {
-    const distance = ride.distance ? parseInt(ride.distance.replace(/[^0-9]/g, '')) : 0;
-    return acc + distance;
-  }, 0) || 0;
-  
-  const co2Saved = Math.round((totalDistance * 0.12) * 10) / 10; // kg of CO2
-
   return (
-    <SidebarProvider>
-      <div className="flex">
-        <Sidebar>
-          <SidebarHeader>
-            <div className="flex items-center px-2">
-              <div className="flex items-center gap-2 font-semibold text-xl text-primary">
-                <Car className="h-6 w-6" />
-                <span>JiranRide</span>
-              </div>
-              <div className="flex-1" />
-              <SidebarTrigger />
-            </div>
-          </SidebarHeader>
-          
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "overview"} 
-                  onClick={() => setActiveTab("overview")}
-                >
-                  <LayoutDashboard />
-                  <span>Overview</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "my-rides"} 
-                  onClick={() => setActiveTab("my-rides")}
-                >
-                  <Car />
-                  <span>My Rides</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "find-rides"} 
-                  onClick={() => setActiveTab("find-rides")}
-                >
-                  <MapPin />
-                  <span>Find Rides</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "my-bookings"} 
-                  onClick={() => setActiveTab("my-bookings")}
-                >
-                  <Calendar />
-                  <span>My Bookings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "history"} 
-                  onClick={() => setActiveTab("history")}
-                >
-                  <History />
-                  <span>Ride History</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "profile"} 
-                  onClick={() => navigate('/profile')}
-                >
-                  <User />
-                  <span>Profile</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={activeTab === "settings"} 
-                  onClick={() => setActiveTab("settings")}
-                >
-                  <Settings />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
-          
-          <SidebarFooter>
-            <div className="p-4">
-              <Link to="/profile">
-                <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-accent">
-                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white">
-                    {user?.email?.charAt(0).toUpperCase() || "U"}
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-medium">{user?.email || "User"}</p>
-                    <p className="text-muted-foreground text-xs">View profile</p>
-                  </div>
-                </div>
-              </Link>
-            </div>
-          </SidebarFooter>
-        </Sidebar>
+    <div className="container py-10">
+      <h1 className="text-3xl font-bold tracking-tight mb-6">Dashboard</h1>
+      
+      <Tabs defaultValue={selectedTab} onValueChange={handleTabChange}>
+        <TabsList className="w-full justify-start mb-8">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="my-rides">My Rides</TabsTrigger>
+          <TabsTrigger value="my-bookings">My Bookings</TabsTrigger>
+        </TabsList>
         
-        <SidebarInset className="bg-muted/50">
-          <div className="container p-6">
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-medium">My Rides</CardTitle>
+                <CardDescription>Rides you have offered as a driver</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{totalRides}</div>
                 <p className="text-muted-foreground">
-                  Welcome back! Here's what's happening with your rides.
+                  {activeRides} active rides
                 </p>
-                
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        Total Rides
-                      </CardTitle>
-                      <Car className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      {isLoadingUserRides ? (
-                        <Skeleton className="h-8 w-24" />
-                      ) : (
-                        <>
-                          <div className="text-2xl font-bold">{totalRides}</div>
-                          <p className="text-xs text-muted-foreground">
-                            {totalRides > 0 ? `Since ${format(new Date(userRides[0].created_at), 'MMM yyyy')}` : 'No rides yet'}
-                          </p>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        CO2 Saved
-                      </CardTitle>
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      {isLoadingUserRides ? (
-                        <Skeleton className="h-8 w-24" />
-                      ) : (
-                        <>
-                          <div className="text-2xl font-bold">{co2Saved} kg</div>
-                          <p className="text-xs text-muted-foreground">
-                            By sharing your rides
-                          </p>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        My Bookings
-                      </CardTitle>
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      {isLoadingUserBookings ? (
-                        <Skeleton className="h-8 w-24" />
-                      ) : (
-                        <>
-                          <div className="text-2xl font-bold">{totalBookings}</div>
-                          <p className="text-xs text-muted-foreground">
-                            {pendingBookings.length} pending, {confirmedBookings.length} confirmed
-                          </p>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                <h2 className="text-xl font-semibold mt-8 mb-4">Upcoming Rides</h2>
-                
-                {isLoadingRides ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[1, 2].map((i) => (
-                      <Card key={i}>
-                        <CardContent className="p-6">
-                          <div className="space-y-3">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-4 w-1/2" />
-                            <Skeleton className="h-4 w-2/3" />
-                            <Skeleton className="h-10 w-full" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : upcomingRides.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {upcomingRides.map((ride) => (
-                      <RideCard 
-                        key={ride.id} 
-                        ride={{
-                          id: ride.id,
-                          from: ride.from_location,
-                          to: ride.to_location,
-                          date: ride.departure_date,
-                          time: ride.departure_time,
-                          price: ride.price,
-                          seats: ride.available_seats,
-                          distance: ride.distance || "Unknown",
-                          driver: {
-                            name: ride.driver.first_name || "Unknown",
-                            avatar: ride.driver.avatar_url || "https://i.pravatar.cc/150?img=1",
-                            rating: ride.driver.rating || 4.5,
-                            verified: true
-                          }
-                        }} 
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-10">
-                      <Car className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground text-center mb-4">
-                        No upcoming rides available
-                      </p>
-                      <Button asChild>
-                        <Link to="/find-rides">Find a Ride</Link>
+              </CardContent>
+              <CardFooter>
+                <Button onClick={() => navigate("/offer-ride")} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Offer New Ride
+                </Button>
+              </CardFooter>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-medium">My Bookings</CardTitle>
+                <CardDescription>Rides you have booked as a passenger</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{totalBookings}</div>
+                <p className="text-muted-foreground">
+                  {activeBookings} active bookings
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button onClick={() => navigate("/find-rides")} className="w-full">
+                  <Car className="mr-2 h-4 w-4" />
+                  Find Rides
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+          
+          <h2 className="text-xl font-semibold mb-4">Upcoming Rides</h2>
+          {isLoadingUserRides ? (
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <Card key={i}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <Skeleton className="h-10 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : upcomingRides.length > 0 ? (
+            <div className="space-y-4">
+              {upcomingRides.slice(0, 3).map((ride) => (
+                <Card key={ride.id}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="font-medium">{ride.from_location} to {ride.to_location}</div>
+                        <div className="text-sm text-muted-foreground flex items-center">
+                          <Calendar className="h-3.5 w-3.5 mr-1" />
+                          {format(parseISO(ride.departure_date), "MMMM d, yyyy")}
+                          <Clock className="h-3.5 w-3.5 ml-3 mr-1" />
+                          {ride.departure_time}
+                        </div>
+                        <div className="text-sm">
+                          <Badge variant="outline">{ride.available_seats} seats left</Badge>
+                          <span className="ml-2 text-muted-foreground">RM {parseFloat(ride.price.toString()).toFixed(2)} per seat</span>
+                        </div>
+                      </div>
+                      <Button variant="outline" onClick={() => navigate(`/edit-ride/${ride.id}`)}>
+                        Manage
                       </Button>
-                    </CardContent>
-                  </Card>
-                )}
-                
-                <div className="flex items-center justify-between mt-8">
-                  <h2 className="text-xl font-semibold">Recent Bookings</h2>
-                  {userBookings && userBookings.length > 0 && (
-                    <Button variant="outline" size="sm" onClick={() => setActiveTab("my-bookings")}>
-                      View all
-                    </Button>
-                  )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {upcomingRides.length > 3 && (
+                <div className="text-center">
+                  <Button 
+                    variant="link" 
+                    onClick={() => handleTabChange("my-rides")}
+                  >
+                    View all rides
+                  </Button>
                 </div>
+              )}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground text-center mb-4">
+                  You don't have any upcoming rides
+                </p>
+                <Button onClick={() => navigate("/offer-ride")}>Offer a Ride</Button>
+              </CardContent>
+            </Card>
+          )}
+          
+          <h2 className="text-xl font-semibold mb-4 mt-8">Recent Bookings</h2>
+          {isLoadingUserBookings ? (
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <Card key={i}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <Skeleton className="h-10 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : upcomingBookings.length > 0 ? (
+            <div className="space-y-4">
+              {upcomingBookings.slice(0, 3).map((booking) => (
+                <Card key={booking.id}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {booking.ride.from_location} to {booking.ride.to_location}
+                          <Badge 
+                            className="ml-2" 
+                            variant={
+                              booking.status === "confirmed" 
+                                ? "success" 
+                                : booking.status === "cancelled" 
+                                ? "destructive" 
+                                : "outline"
+                            }
+                          >
+                            {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground flex items-center">
+                          <Calendar className="h-3.5 w-3.5 mr-1" />
+                          {format(parseISO(booking.ride.departure_date), "MMMM d, yyyy")}
+                          <Clock className="h-3.5 w-3.5 ml-3 mr-1" />
+                          {booking.ride.departure_time}
+                        </div>
+                        <div className="text-sm flex items-center">
+                          <User className="h-3.5 w-3.5 mr-1" />
+                          Driver: {booking.ride.driver.first_name || 'Unknown'} {booking.ride.driver.last_name || ''}
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        className="shrink-0"
+                        onClick={() => setConfirmCancelBooking({
+                          bookingId: booking.id,
+                          rideId: booking.ride_id
+                        })}
+                        disabled={booking.status === "cancelled"}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {upcomingBookings.length > 3 && (
+                <div className="text-center">
+                  <Button 
+                    variant="link" 
+                    onClick={() => handleTabChange("my-bookings")}
+                  >
+                    View all bookings
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground text-center mb-4">
+                  You don't have any recent bookings
+                </p>
+                <Button onClick={() => navigate("/find-rides")}>Find Rides</Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        {/* My Rides Tab */}
+        <TabsContent value="my-rides">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">My Rides</h2>
+            <Button onClick={() => navigate("/offer-ride")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Offer New Ride
+            </Button>
+          </div>
+          
+          {isLoadingUserRides ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Skeleton className="h-10 w-24" />
+                        <Skeleton className="h-10 w-24" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : userRides && userRides.length > 0 ? (
+            <div className="space-y-4">
+              {userRides.map((ride) => {
+                const isPast = new Date(`${ride.departure_date}T${ride.departure_time}`) < new Date();
                 
-                {isLoadingUserBookings ? (
-                  <Card>
-                    <CardContent className="p-0">
-                      <div className="divide-y">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="p-4">
-                            <Skeleton className="h-12 w-full" />
+                return (
+                  <Card key={ride.id} className={isPast ? "opacity-70" : ""}>
+                    <CardContent className="py-4">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="font-medium">
+                            {ride.from_location} to {ride.to_location}
+                            {isPast && (
+                              <Badge variant="outline" className="ml-2">Completed</Badge>
+                            )}
                           </div>
-                        ))}
+                          <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="flex items-center">
+                              <Calendar className="h-3.5 w-3.5 mr-1" />
+                              {format(parseISO(ride.departure_date), "MMMM d, yyyy")}
+                            </span>
+                            <span className="flex items-center">
+                              <Clock className="h-3.5 w-3.5 mr-1" />
+                              {ride.departure_time}
+                            </span>
+                            {ride.distance && (
+                              <span className="flex items-center">
+                                <MapPin className="h-3.5 w-3.5 mr-1" />
+                                {ride.distance}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm">
+                            <Badge variant="outline">{ride.available_seats} seats left</Badge>
+                            <span className="ml-2 text-muted-foreground">RM {parseFloat(ride.price.toString()).toFixed(2)} per seat</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            onClick={() => navigate(`/edit-ride/${ride.id}`)}
+                            disabled={isPast}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setConfirmDeleteRide(ride.id)}
+                            disabled={isPast}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
-                ) : userBookings && userBookings.length > 0 ? (
-                  <Card>
-                    <CardContent className="p-0">
-                      <div className="divide-y">
-                        {userBookings.slice(0, 3).map((booking) => (
-                          <div key={booking.id} className="flex items-center gap-4 p-4">
-                            <div className="rounded-full bg-primary/10 p-2">
-                              <Car className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <p className="text-sm font-medium">
-                                {booking.ride.from_location} to {booking.ride.to_location}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {format(parseISO(booking.ride.departure_date), 'MMM dd, yyyy')} at {booking.ride.departure_time}
-                              </p>
-                            </div>
-                            <Badge variant={
-                              booking.status === 'confirmed' ? 'default' : 
-                              booking.status === 'pending' ? 'outline' : 'destructive'
-                            }>
-                              {booking.status}
+                );
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground text-center mb-4">
+                  You haven't offered any rides yet
+                </p>
+                <Button onClick={() => navigate("/offer-ride")}>Offer a Ride</Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        {/* My Bookings Tab */}
+        <TabsContent value="my-bookings">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">My Bookings</h2>
+            <Button onClick={() => navigate("/find-rides")}>
+              <Car className="mr-2 h-4 w-4" />
+              Find Rides
+            </Button>
+          </div>
+          
+          {isLoadingUserBookings ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <Skeleton className="h-10 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : userBookings && userBookings.length > 0 ? (
+            <div className="space-y-4">
+              {userBookings.map((booking) => {
+                const isPast = new Date(`${booking.ride.departure_date}T${booking.ride.departure_time}`) < new Date();
+                
+                return (
+                  <Card key={booking.id} className={isPast ? "opacity-70" : ""}>
+                    <CardContent className="py-4">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="font-medium">
+                            {booking.ride.from_location} to {booking.ride.to_location}
+                            <Badge 
+                              className="ml-2" 
+                              variant={
+                                booking.status === "confirmed" 
+                                  ? "success" 
+                                  : booking.status === "cancelled" 
+                                  ? "destructive" 
+                                  : "outline"
+                              }
+                            >
+                              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                             </Badge>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-10">
-                      <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground text-center mb-4">
-                        You haven't booked any rides yet
-                      </p>
-                      <Button asChild>
-                        <Link to="/find-rides">Book a Ride</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )}
-            
-            {activeTab === "my-rides" && (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="text-3xl font-bold tracking-tight">My Rides</h1>
-                  <Button onClick={() => navigate('/offer-ride')}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Offer a Ride
-                  </Button>
-                </div>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Your Rides</CardTitle>
-                    <CardDescription>Rides that you're offering to others</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingUserRides ? (
-                      <div className="space-y-4">
-                        {[1, 2].map((i) => (
-                          <Skeleton key={i} className="h-24 w-full" />
-                        ))}
-                      </div>
-                    ) : userUpcomingRides.length > 0 ? (
-                      <div className="space-y-4">
-                        {userUpcomingRides.map((ride) => (
-                          <Card key={ride.id} className="overflow-hidden">
-                            <div className="flex flex-col sm:flex-row">
-                              <div className="p-4 flex-1">
-                                <div className="flex items-start justify-between">
-                                  <div>
-                                    <h3 className="font-semibold">
-                                      {ride.from_location} to {ride.to_location}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                      {format(parseISO(ride.departure_date), 'MMM dd, yyyy')} at {ride.departure_time}
-                                    </p>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="font-semibold">RM {ride.price.toFixed(2)}</span>
-                                    <p className="text-sm text-muted-foreground">
-                                      {ride.available_seats} {ride.available_seats === 1 ? 'seat' : 'seats'} left
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="bg-muted p-4 flex items-center justify-end gap-2 sm:w-48">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => navigate(`/edit-ride/${ride.id}`)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button 
-                                  variant="destructive" 
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedRide(ride as any);
-                                    setDeleteDialogOpen(true);
-                                  }}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-10">
-                        <Car className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground mb-4">You're not offering any rides yet</p>
-                        <Button onClick={() => navigate('/offer-ride')}>Offer a Ride</Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-            
-            {activeTab === "find-rides" && (
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight mb-6">Find Rides</h1>
-                <Card className="mb-6">
-                  <CardHeader>
-                    <CardTitle>Search for Rides</CardTitle>
-                    <CardDescription>Find rides from your neighborhood to your destination</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">From</label>
-                        <div className="flex items-center rounded-md border border-input bg-background px-3 py-2">
-                          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <input 
-                            placeholder="Starting point" 
-                            className="flex-1 bg-transparent outline-none"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-2">To</label>
-                        <div className="flex items-center rounded-md border border-input bg-background px-3 py-2">
-                          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <input 
-                            placeholder="Destination" 
-                            className="flex-1 bg-transparent outline-none"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-2">When</label>
-                        <div className="flex items-center rounded-md border border-input bg-background px-3 py-2">
-                          <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <input 
-                            type="date" 
-                            className="flex-1 bg-transparent outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <Button className="w-full mt-4">Search Rides</Button>
-                  </CardContent>
-                </Card>
-                
-                <h2 className="text-xl font-semibold mt-8 mb-4">Available Rides</h2>
-                
-                {isLoadingRides ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[1, 2, 3, 4].map((i) => (
-                      <Card key={i}>
-                        <CardContent className="p-6">
-                          <div className="space-y-3">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-4 w-1/2" />
-                            <Skeleton className="h-4 w-2/3" />
-                            <Skeleton className="h-10 w-full" />
+                          <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="flex items-center">
+                              <Calendar className="h-3.5 w-3.5 mr-1" />
+                              {format(parseISO(booking.ride.departure_date), "MMMM d, yyyy")}
+                            </span>
+                            <span className="flex items-center">
+                              <Clock className="h-3.5 w-3.5 mr-1" />
+                              {booking.ride.departure_time}
+                            </span>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : upcomingRides.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {upcomingRides.map((ride) => (
-                      <RideCard 
-                        key={ride.id} 
-                        ride={{
-                          id: ride.id,
-                          from: ride.from_location,
-                          to: ride.to_location,
-                          date: ride.departure_date,
-                          time: ride.departure_time,
-                          price: ride.price,
-                          seats: ride.available_seats,
-                          distance: ride.distance || "Unknown",
-                          driver: {
-                            name: ride.driver.first_name || "Unknown",
-                            avatar: ride.driver.avatar_url || "https://i.pravatar.cc/150?img=1",
-                            rating: ride.driver.rating || 4.5,
-                            verified: true
-                          }
-                        }} 
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-10">
-                      <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground text-center mb-4">
-                        No rides available for your search criteria
-                      </p>
-                      <Button onClick={() => navigate('/offer-ride')}>Offer a Ride Instead</Button>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )}
-            
-            {activeTab === "my-bookings" && (
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight mb-6">My Bookings</h1>
-                
-                <Tabs defaultValue="upcoming" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-4">
-                    <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                    <TabsTrigger value="past">Past</TabsTrigger>
-                    <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
-                  </TabsList>
-                  
-                  {isLoadingUserBookings ? (
-                    <div className="space-y-4 mt-4">
-                      {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-24 w-full" />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <TabsContent value="upcoming">
-                        {pendingBookings.length > 0 || confirmedBookings.length > 0 ? (
-                          <div className="space-y-4">
-                            {[...pendingBookings, ...confirmedBookings]
-                              .sort((a, b) => new Date(a.ride.departure_date).getTime() - new Date(b.ride.departure_date).getTime())
-                              .map((booking) => (
-                                <Card key={booking.id} className="overflow-hidden">
-                                  <div className="flex flex-col sm:flex-row">
-                                    <div className="p-4 flex-1">
-                                      <div className="flex items-start justify-between">
-                                        <div>
-                                          <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold">
-                                              {booking.ride.from_location} to {booking.ride.to_location}
-                                            </h3>
-                                            <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'}>
-                                              {booking.status}
-                                            </Badge>
-                                          </div>
-                                          <p className="text-sm text-muted-foreground mt-1">
-                                            {format(parseISO(booking.ride.departure_date), 'MMM dd, yyyy')} at {booking.ride.departure_time}
-                                          </p>
-                                          <p className="text-sm mt-2">
-                                            Driver: {booking.ride.driver.first_name || 'Unknown'} {booking.ride.driver.last_name || ''}
-                                          </p>
-                                        </div>
-                                        <div className="text-right">
-                                          <span className="font-semibold">RM {booking.ride.price.toFixed(2)}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="bg-muted p-4 flex items-center justify-end gap-2 sm:w-48">
-                                      <Button 
-                                        variant="destructive" 
-                                        size="sm"
-                                        onClick={() => handleCancelBooking(booking.id, booking.ride.id)}
-                                        disabled={cancelBooking.isLoading}
-                                      >
-                                        {cancelBooking.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Cancel'}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </Card>
-                              ))}
+                          <div className="text-sm flex items-center">
+                            <Avatar className="h-5 w-5 mr-1">
+                              <AvatarImage src={booking.ride.driver.avatar_url || ""} />
+                              <AvatarFallback className="text-[10px]">
+                                {booking.ride.driver.first_name?.[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            Driver: {booking.ride.driver.first_name || 'Unknown'} {booking.ride.driver.last_name || ''}
+                            <span className="ml-4 text-muted-foreground">RM {parseFloat(booking.ride.price.toString()).toFixed(2)}</span>
                           </div>
-                        ) : (
-                          <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-10">
-                              <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                              <p className="text-muted-foreground text-center mb-4">
-                                You don't have any upcoming bookings
-                              </p>
-                              <Button asChild>
-                                <Link to="/find-rides">Find a Ride</Link>
-                              </Button>
-                            </CardContent>
-                          </Card>
+                        </div>
+                        
+                        {!isPast && booking.status !== "cancelled" && (
+                          <Button 
+                            variant="outline" 
+                            className="shrink-0"
+                            onClick={() => setConfirmCancelBooking({
+                              bookingId: booking.id,
+                              rideId: booking.ride.id
+                            })}
+                          >
+                            Cancel Booking
+                          </Button>
                         )}
-                      </TabsContent>
-                      
-                      <TabsContent value="past">
-                        <Card>
-                          <CardContent className="flex flex-col items-center justify-center py-10">
-                            <History className="h-12 w-12 text-muted-foreground mb-4" />
-                            <p className="text-muted-foreground text-center mb-4">
-                              You don't have any past bookings
-                            </p>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-                      
-                      <TabsContent value="cancelled">
-                        {cancelledBookings.length > 0 ? (
-                          <div className="space-y-4">
-                            {cancelledBookings.map((booking) => (
-                              <Card key={booking.id} className="overflow-hidden">
-                                <div className="p-4">
-                                  <div className="flex items-start justify-between">
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <h3 className="font-semibold">
-                                          {booking.ride.from_location} to {booking.ride.to_location}
-                                        </h3>
-                                        <Badge variant="destructive">
-                                          {booking.status}
-                                        </Badge>
-                                      </div>
-                                      <p className="text-sm text-muted-foreground mt-1">
-                                        {format(parseISO(booking.ride.departure_date), 'MMM dd, yyyy')} at {booking.ride.departure_time}
-                                      </p>
-                                    </div>
-                                    <div className="text-right">
-                                      <span className="font-semibold">RM {booking.ride.price.toFixed(2)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
-                        ) : (
-                          <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-10">
-                              <Check className="h-12 w-12 text-muted-foreground mb-4" />
-                              <p className="text-muted-foreground text-center">
-                                You don't have any cancelled bookings
-                              </p>
-                            </CardContent>
-                          </Card>
-                        )}
-                      </TabsContent>
-                    </>
-                  )}
-                </Tabs>
-              </div>
-            )}
-            
-            {/* Delete ride confirmation dialog */}
-            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Are you sure?</DialogTitle>
-                  <DialogDescription>
-                    This action cannot be undone. This will permanently delete this ride and cancel all associated bookings.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button 
-                    variant="destructive" 
-                    onClick={() => selectedRide && handleDeleteRide(selectedRide.id)}
-                    disabled={deleteRide.isLoading}
-                  >
-                    {deleteRide.isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Delete
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground text-center mb-4">
+                  You haven't booked any rides yet
+                </p>
+                <Button onClick={() => navigate("/find-rides")}>Find Rides</Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Confirm Delete Ride Dialog */}
+      <Dialog open={!!confirmDeleteRide} onOpenChange={() => setConfirmDeleteRide(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Ride</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this ride? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteRide(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => confirmDeleteRide && handleDeleteRide(confirmDeleteRide)}
+              disabled={deleteRide.isPending}
+            >
+              {deleteRide.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : "Delete Ride"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Confirm Cancel Booking Dialog */}
+      <Dialog 
+        open={!!confirmCancelBooking} 
+        onOpenChange={() => setConfirmCancelBooking(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Booking</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this booking?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCancelBooking(null)}>
+              No, Keep Booking
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => confirmCancelBooking && 
+                handleCancelBooking(confirmCancelBooking.bookingId, confirmCancelBooking.rideId)}
+              disabled={cancelBooking.isPending}
+            >
+              {cancelBooking.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Cancelling...
+                </>
+              ) : "Yes, Cancel Booking"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

@@ -29,7 +29,7 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Calendar as CalendarIcon, Car, Clock, Loader2, MapPin, User } from "lucide-react";
+import { AlertCircle, Calendar as CalendarIcon, Car, Clock, Loader2, MapPin, Star, User } from "lucide-react";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { z } from "zod";

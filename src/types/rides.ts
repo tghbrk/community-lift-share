@@ -9,6 +9,7 @@ export type Ride = {
   price: number;
   available_seats: number;
   distance?: string;
+  additional_notes?: string;
   created_at: string;
   updated_at: string;
 };

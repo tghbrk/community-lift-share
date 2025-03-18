@@ -17,17 +17,64 @@ export const useBookings = () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
       
-      const { data, error } = await supabase
+      // First, get the user's bookings
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select(`
-          *,
-          ride:rides(*, driver:profiles(first_name, last_name, avatar_url, rating))
-        `)
+        .select('*')
         .eq('user_id', user.user.id)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
-      return data;
+      if (bookingsError) throw bookingsError;
+      
+      // Then, get the ride details for each booking
+      const rideIds = bookingsData.map(booking => booking.ride_id);
+      
+      const { data: ridesData, error: ridesError } = await supabase
+        .from('rides')
+        .select('*')
+        .in('id', rideIds);
+      
+      if (ridesError) throw ridesError;
+      
+      // Get driver profiles
+      const driverIds = ridesData.map(ride => ride.user_id);
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url, rating')
+        .in('id', driverIds);
+      
+      if (profilesError) throw profilesError;
+      
+      // Create maps for quick lookup
+      const ridesMap = new Map();
+      ridesData.forEach(ride => {
+        ridesMap.set(ride.id, ride);
+      });
+      
+      const profilesMap = new Map();
+      profilesData.forEach(profile => {
+        profilesMap.set(profile.id, profile);
+      });
+      
+      // Combine the data
+      return bookingsData.map(booking => {
+        const ride = ridesMap.get(booking.ride_id);
+        const driver = ride ? profilesMap.get(ride.user_id) : null;
+        
+        return {
+          ...booking,
+          ride: {
+            ...ride,
+            driver: driver || {
+              first_name: null,
+              last_name: null,
+              avatar_url: null,
+              rating: null
+            }
+          }
+        };
+      });
     }
   });
   
@@ -89,14 +136,6 @@ export const useBookings = () => {
       setIsLoading(false);
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
-      queryClient.invalidateQueries({ queryKey: ['rides'] });
-      toast({
-        title: "Success!",
-        description: "Your ride has been booked.",
-      });
-    },
     onError: (error: any) => {
       console.error('Error booking ride:', error);
       toast({
@@ -142,14 +181,6 @@ export const useBookings = () => {
       
       setIsLoading(false);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
-      queryClient.invalidateQueries({ queryKey: ['rides'] });
-      toast({
-        title: "Success!",
-        description: "Your booking has been cancelled.",
-      });
-    },
     onError: (error) => {
       console.error('Error cancelling booking:', error);
       toast({
@@ -172,13 +203,6 @@ export const useBookings = () => {
       
       if (error) throw error;
       setIsLoading(false);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
-      toast({
-        title: "Success!",
-        description: "Booking status has been updated.",
-      });
     },
     onError: (error) => {
       console.error('Error updating booking status:', error);

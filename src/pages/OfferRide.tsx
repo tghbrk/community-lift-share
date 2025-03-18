@@ -1,5 +1,4 @@
 
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Card, 
@@ -45,7 +44,7 @@ type OfferRideFormValues = z.infer<typeof offerRideSchema>;
 
 const OfferRide = () => {
   const navigate = useNavigate();
-  const { createRide, isLoading } = useRides();
+  const { createRide } = useRides();
   
   const form = useForm<OfferRideFormValues>({
     resolver: zodResolver(offerRideSchema),
@@ -61,10 +60,13 @@ const OfferRide = () => {
   
   const onSubmit = async (data: OfferRideFormValues) => {
     try {
-      await createRide.mutateAsync(data);
-      navigate('/dashboard');
+      await createRide.mutateAsync({
+        ...data,
+        departure_date: format(data.departure_date, 'yyyy-MM-dd')
+      });
+      navigate('/dashboard?tab=my-rides');
     } catch (error) {
-      console.error("Error submitting form:", error);
+      console.error("Error creating ride:", error);
     }
   };
   
@@ -74,7 +76,7 @@ const OfferRide = () => {
         <CardHeader>
           <CardTitle>Offer a Ride</CardTitle>
           <CardDescription>
-            Share your journey and help your community while saving on travel costs
+            Share your journey with others and reduce travel costs
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -155,9 +157,6 @@ const OfferRide = () => {
                             mode="single"
                             selected={field.value}
                             onSelect={field.onChange}
-                            disabled={(date) =>
-                              date < new Date(new Date().setHours(0, 0, 0, 0))
-                            }
                             initialFocus
                           />
                         </PopoverContent>
@@ -263,14 +262,24 @@ const OfferRide = () => {
                 )}
               />
             </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={isLoading || createRide.isLoading}>
-                {(isLoading || createRide.isLoading) ? (
+            <CardFooter className="flex justify-between">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => navigate('/dashboard')}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={createRide.isPending}
+              >
+                {createRide.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Ride...
+                    Creating...
                   </>
-                ) : "Create Ride"}
+                ) : "Offer Ride"}
               </Button>
             </CardFooter>
           </form>

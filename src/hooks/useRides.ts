@@ -14,19 +14,39 @@ export const useRides = () => {
   const { data: rides, error: ridesError, isLoading: isLoadingRides } = useQuery({
     queryKey: ['rides'],
     queryFn: async (): Promise<RideWithDriver[]> => {
-      const { data, error } = await supabase
+      // First fetch rides
+      const { data: ridesData, error: ridesError } = await supabase
         .from('rides')
-        .select(`
-          *,
-          driver:profiles(first_name, last_name, avatar_url, rating)
-        `)
+        .select('*')
         .order('departure_date', { ascending: true });
       
-      if (error) throw error;
+      if (ridesError) throw ridesError;
       
-      return data.map(ride => ({
+      // Then fetch profiles for each unique user_id
+      const userIds = [...new Set(ridesData.map(ride => ride.user_id))];
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url, rating')
+        .in('id', userIds);
+      
+      if (profilesError) throw profilesError;
+      
+      // Create a map of user_id to profile
+      const profilesMap = new Map();
+      profilesData.forEach(profile => {
+        profilesMap.set(profile.id, {
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          avatar_url: profile.avatar_url,
+          rating: profile.rating
+        });
+      });
+      
+      // Combine rides with driver information
+      return ridesData.map(ride => ({
         ...ride,
-        driver: ride.driver || {
+        driver: profilesMap.get(ride.user_id) || {
           first_name: null,
           last_name: null,
           avatar_url: null,
@@ -97,9 +117,16 @@ export const useRides = () => {
   const updateRide = useMutation({
     mutationFn: async ({ id, ...ride }: Partial<Ride> & { id: string }) => {
       setIsLoading(true);
+      
+      // Format the departure_date if it's a Date object
+      const formattedRide = { ...ride };
+      if (ride.departure_date instanceof Date) {
+        formattedRide.departure_date = ride.departure_date.toISOString().split('T')[0];
+      }
+      
       const { data, error } = await supabase
         .from('rides')
-        .update(ride)
+        .update(formattedRide)
         .eq('id', id)
         .select()
         .single();
